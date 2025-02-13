@@ -9,12 +9,15 @@ using MetadataExtractor.Formats.Exif;
 using Directory = System.IO.Directory;
 using System.Text.Json;
 using WPF_VideoSort.Models;
+using WPF_VideoSort.Services;
 
 namespace WPF_VideoSort.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
         private const string SETTINGS_FILE = "settings.json";
+        private readonly MediaService _mediaService;
+        private readonly SortSettingsViewModel _sortSettingsViewModel;
 
         [ObservableProperty]
         private string? sourceFolder;
@@ -31,17 +34,7 @@ namespace WPF_VideoSort.ViewModels
         [ObservableProperty]
         private bool isSorting;
 
-        [ObservableProperty]
-        private SortOption selectedSortOption = SortOption.DateTaken;
-
-        public List<SortOption> AvailableSortOptions => Enum.GetValues(typeof(SortOption))
-                                                           .Cast<SortOption>()
-                                                           .ToList();
-
-        public MainViewModel()
-        {
-            LoadSettings();
-        }
+        public SortSettingsViewModel SortSettings => _sortSettingsViewModel;
 
         private readonly string[] supportedExtensions = new[]
         { 
@@ -52,25 +45,11 @@ namespace WPF_VideoSort.ViewModels
             ".cr2", ".nef", ".arw", ".dng"
         };
 
-        [RelayCommand]
-        private void HandleFolderDrop(object parameter)
+        public MainViewModel()
         {
-            if (parameter is string[] files && files.Length > 0 && Directory.Exists(files[0]))
-            {
-                SourceFolder = files[0];
-                DestinationFolder = files[0];
-                SaveSettings();
-            }
-        }
-
-        [RelayCommand]
-        private void HandleDestinationFolderDrop(object parameter)
-        {
-            if (parameter is string[] files && files.Length > 0 && Directory.Exists(files[0]))
-            {
-                DestinationFolder = files[0];
-                SaveSettings();
-            }
+            _mediaService = new MediaService();
+            _sortSettingsViewModel = new SortSettingsViewModel(_mediaService);
+            LoadSettings();
         }
 
         [RelayCommand]
@@ -112,26 +91,49 @@ namespace WPF_VideoSort.ViewModels
 
             try
             {
-                await Task.Run(() =>
+                await Task.Run(async () =>
                 {
                     var files = supportedExtensions
                         .SelectMany(ext => Directory.GetFiles(SourceFolder, $"*{ext}"))
                         .ToList();
 
+                    var processedFiles = new HashSet<string>(); // Für Duplikaterkennung
                     var totalFiles = files.Count;
-                    var processedFiles = 0;
+                    var currentFile = 0;
 
                     foreach (var file in files)
                     {
                         try
                         {
+                            // Überprüfe auf Duplikate falls aktiviert
+                            if (SortSettings.Settings.EnableDuplicateCheck)
+                            {
+                                var isDuplicate = false;
+                                foreach (var processedFile in processedFiles)
+                                {
+                                    if (_mediaService.AreDuplicates(file, processedFile,
+                                        SortSettings.Settings.UseHashForDuplicates))
+                                    {
+                                        App.Current.Dispatcher.Invoke(() =>
+                                            LogMessages.Add($"Duplikat gefunden: {Path.GetFileName(file)}"));
+                                        isDuplicate = true;
+                                        break;
+                                    }
+                                }
+                                if (isDuplicate) continue;
+                            }
+
                             var mediaDate = GetMediaDate(file);
-                            string yearFolder = Path.Combine(DestinationFolder, mediaDate.Year.ToString());
-                            string monthFolder = Path.Combine(yearFolder, mediaDate.ToString("yyyy-MM"));
+                            var customValues = SortSettings.GetCustomValues(file);
 
-                            Directory.CreateDirectory(monthFolder);
+                            string targetFolder = SortSettings.Settings.GetFolderPath(
+                                mediaDate,
+                                DestinationFolder,
+                                customValues
+                            );
 
-                            string destinationFile = Path.Combine(monthFolder, Path.GetFileName(file));
+                            Directory.CreateDirectory(targetFolder);
+                            string destinationFile = Path.Combine(targetFolder, Path.GetFileName(file));
 
                             if (File.Exists(destinationFile))
                             {
@@ -141,14 +143,15 @@ namespace WPF_VideoSort.ViewModels
                             else
                             {
                                 File.Move(file, destinationFile);
+                                processedFiles.Add(destinationFile);
                                 App.Current.Dispatcher.Invoke(() =>
                                     LogMessages.Add($"Verschoben: {Path.GetFileName(file)} -> {destinationFile}"));
                             }
 
-                            processedFiles++;
+                            currentFile++;
                             App.Current.Dispatcher.Invoke(() =>
                             {
-                                ProgressValue = (double)processedFiles / totalFiles * 100;
+                                ProgressValue = (double)currentFile / totalFiles * 100;
                             });
                         }
                         catch (Exception ex)
@@ -174,7 +177,7 @@ namespace WPF_VideoSort.ViewModels
         {
             try
             {
-                switch (SelectedSortOption)
+                switch (SortSettings.Settings.SortOption)
                 {
                     case SortOption.DateTaken:
                         var directories = ImageMetadataReader.ReadMetadata(filePath);
@@ -214,12 +217,24 @@ namespace WPF_VideoSort.ViewModels
             {
                 if (File.Exists(SETTINGS_FILE))
                 {
-                    var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SETTINGS_FILE));
-                    if (settings != null)
+                    var json = File.ReadAllText(SETTINGS_FILE);
+                    var settingsData = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+
+                    if (settingsData != null)
                     {
-                        SourceFolder = settings.LastSourceFolder;
-                        DestinationFolder = settings.LastDestinationFolder;
-                        SelectedSortOption = settings.LastSortOption;
+                        if (settingsData.TryGetValue("LastSourceFolder", out var sourceFolder))
+                            SourceFolder = sourceFolder?.ToString();
+
+                        if (settingsData.TryGetValue("LastDestinationFolder", out var destFolder))
+                            DestinationFolder = destFolder?.ToString();
+
+                        if (settingsData.TryGetValue("SortSettings", out var sortSettings))
+                        {
+                            var settings = JsonSerializer.Deserialize<SortSettings>(
+                                sortSettings?.ToString() ?? "{}");
+                            if (settings != null)
+                                SortSettings.Settings = settings;
+                        }
                     }
                 }
             }
@@ -233,14 +248,15 @@ namespace WPF_VideoSort.ViewModels
         {
             try
             {
-                var settings = new Settings
+                var settingsData = new Dictionary<string, object>
                 {
-                    LastSourceFolder = SourceFolder,
-                    LastDestinationFolder = DestinationFolder,
-                    LastSortOption = SelectedSortOption
+                    { "LastSourceFolder", SourceFolder ?? "" },
+                    { "LastDestinationFolder", DestinationFolder ?? "" },
+                    { "SortSettings", SortSettings.Settings }
                 };
 
-                File.WriteAllText(SETTINGS_FILE, JsonSerializer.Serialize(settings));
+                var json = JsonSerializer.Serialize(settingsData);
+                File.WriteAllText(SETTINGS_FILE, json);
             }
             catch (Exception ex)
             {

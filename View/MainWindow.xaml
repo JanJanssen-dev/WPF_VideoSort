@@ -9,12 +9,13 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Video Sorter"
-    Width="500"
-    Height="400"
+    Width="600"
+    Height="600"
     mc:Ignorable="d">
 
     <Window.Resources>
         <converter:InverseBooleanConverter x:Key="InverseBooleanConverter" />
+        <converter:SortOptionToVisibilityConverter x:Key="SortOptionToVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
 
@@ -24,6 +25,7 @@
 
     <Grid Margin="10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -40,7 +42,7 @@
             Orientation="Horizontal">
             <TextBlock VerticalAlignment="Center" Text="Quell-Ordner:" />
             <TextBox
-                Width="300"
+                Width="400"
                 Margin="5,0"
                 Tag="source"
                 Text="{Binding SourceFolder, Mode=TwoWay}">
@@ -61,7 +63,7 @@
             Orientation="Horizontal">
             <TextBlock VerticalAlignment="Center" Text="Ziel-Ordner:" />
             <TextBox
-                Width="300"
+                Width="400"
                 Margin="5,0"
                 Tag="destination"
                 Text="{Binding DestinationFolder, Mode=TwoWay}">
@@ -75,18 +77,66 @@
                 Content="..." />
         </StackPanel>
 
-        <!--  Sortier-Option  -->
-        <StackPanel
+        <!--  Erweiterte Einstellungen  -->
+        <Expander
             Grid.Row="2"
-            Margin="0,5"
-            Orientation="Horizontal">
-            <TextBlock VerticalAlignment="Center" Text="Sortieren nach:" />
-            <ComboBox
-                Width="200"
-                Margin="5,0"
-                ItemsSource="{Binding AvailableSortOptions}"
-                SelectedItem="{Binding SelectedSortOption}" />
-        </StackPanel>
+            Margin="0,10"
+            Header="Erweiterte Einstellungen">
+            <StackPanel Margin="10">
+                <!--  Sortier-Optionen  -->
+                <GroupBox Margin="0,5" Header="Sortierung">
+                    <StackPanel Margin="5">
+                        <ComboBox
+                            Margin="0,5"
+                            ItemsSource="{Binding SortSettings.AvailableSortOptions}"
+                            SelectedItem="{Binding SortSettings.Settings.SortOption}" />
+
+                        <!--  Benutzerdefiniertes Muster  -->
+                        <StackPanel Margin="0,5" Visibility="{Binding SortSettings.Settings.SortOption, Converter={StaticResource SortOptionToVisibilityConverter}}">
+                            <TextBlock Margin="0,0,0,5" Text="Benutzerdefiniertes Muster:" />
+                            <TextBox Margin="0,0,0,5" Text="{Binding SortSettings.Settings.CustomPattern}" />
+                            <TextBlock Margin="0,5" Text="Beispiele:" />
+                            <ListBox Height="100" ItemsSource="{Binding SortSettings.CustomPatternExamples}" />
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!--  Duplikaterkennung  -->
+                <GroupBox Margin="0,5" Header="Duplikaterkennung">
+                    <StackPanel Margin="5">
+                        <CheckBox
+                            Margin="0,5"
+                            Content="Duplikate erkennen"
+                            IsChecked="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
+                        <CheckBox
+                            Margin="20,5,0,5"
+                            Content="Hash-basierte Erkennung (genauer aber langsamer)"
+                            IsChecked="{Binding SortSettings.Settings.UseHashForDuplicates}"
+                            IsEnabled="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
+                    </StackPanel>
+                </GroupBox>
+
+                <!--  GPS-Einstellungen  -->
+                <GroupBox Margin="0,5" Header="GPS-Daten">
+                    <StackPanel Margin="5">
+                        <CheckBox
+                            Margin="0,5"
+                            Content="GPS-Daten verwenden"
+                            IsChecked="{Binding SortSettings.Settings.UseGpsData}" />
+                        <StackPanel
+                            Margin="20,5,0,5"
+                            IsEnabled="{Binding SortSettings.Settings.UseGpsData}"
+                            Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center" Text="Cluster-Radius (Meter):" />
+                            <TextBox
+                                Width="60"
+                                Margin="5,0"
+                                Text="{Binding SortSettings.Settings.GpsClusterRadius}" />
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </Expander>
 
         <!--  Start-Button  -->
         <Button
@@ -105,9 +155,16 @@
             Visibility="{Binding IsSorting, Converter={StaticResource BooleanToVisibilityConverter}}"
             Value="{Binding ProgressValue}" />
 
+        <!--  StatusText  -->
+        <TextBlock
+            Grid.Row="5"
+            Margin="0,5"
+            Text="{Binding StatusText}"
+            TextWrapping="Wrap" />
+
         <!--  Log-Ausgabe  -->
         <ListBox
-            Grid.Row="5"
+            Grid.Row="6"
             Margin="0,5"
             ItemsSource="{Binding LogMessages}" />
     </Grid>
