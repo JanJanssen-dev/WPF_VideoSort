@@ -5,62 +5,67 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:VM="clr-namespace:WPF_VideoSort.ViewModels"
+    xmlns:converter="clr-namespace:WPF_VideoSort.Converter"
     Title="Video Sorter"
     Width="500"
-    Height="350"
+    Height="400"
     mc:Ignorable="d">
+
+    <Window.Resources>
+        <converter:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </Window.Resources>
+
     <Window.DataContext>
         <VM:MainViewModel/>
     </Window.DataContext>
+
     <Grid Margin="10">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <!--  Quell-Ordner  -->
-        <StackPanel
-            Grid.Row="0"
-            Margin="0,5"
-            Orientation="Horizontal">
+
+        <!-- Quell-Ordner -->
+        <StackPanel Grid.Row="0" Margin="0,5" Orientation="Horizontal">
             <TextBlock VerticalAlignment="Center" Text="Quell-Ordner:" />
-            <TextBox
-                Width="300"
-                Margin="5,0"
-                Text="{Binding SourceFolder, Mode=TwoWay}" />
-            <Button
-                Width="30"
-                Command="{Binding SelectSourceFolderCommand}"
-                Content="..." />
+            <TextBox Width="300" Margin="5,0" Text="{Binding SourceFolder, Mode=TwoWay}" />
+            <Button Width="30" Command="{Binding SelectSourceFolderCommand}" Content="..." />
         </StackPanel>
-        <!--  Ziel-Ordner  -->
-        <StackPanel
-            Grid.Row="1"
-            Margin="0,5"
-            Orientation="Horizontal">
+
+        <!-- Ziel-Ordner -->
+        <StackPanel Grid.Row="1" Margin="0,5" Orientation="Horizontal">
             <TextBlock VerticalAlignment="Center" Text="Ziel-Ordner:" />
-            <TextBox
-                Width="300"
-                Margin="5,0"
-                Text="{Binding DestinationFolder, Mode=TwoWay}" />
-            <Button
-                Width="30"
-                Command="{Binding SelectDestinationFolderCommand}"
-                Content="..." />
+            <TextBox Width="300" Margin="5,0" Text="{Binding DestinationFolder, Mode=TwoWay}" />
+            <Button Width="30" Command="{Binding SelectDestinationFolderCommand}" Content="..." />
         </StackPanel>
-        <!--  Start-Button  -->
-        <Button
-            Grid.Row="2"
-            Height="30"
-            Margin="0,10"
-            Command="{Binding SortVideosCommand}"
-            Content="Sortieren" />
-        <!--  Log-Ausgabe  -->
-        <ListBox
-            Grid.Row="3"
-            Margin="0,5"
-            ItemsSource="{Binding LogMessages}" />
+
+        <!-- Sortier-Option -->
+        <StackPanel Grid.Row="2" Margin="0,5" Orientation="Horizontal">
+            <TextBlock VerticalAlignment="Center" Text="Sortieren nach:" />
+            <ComboBox Width="200" Margin="5,0" 
+                      ItemsSource="{Binding AvailableSortOptions}"
+                      SelectedItem="{Binding SelectedSortOption}" />
+        </StackPanel>
+
+        <!-- Start-Button -->
+        <Button Grid.Row="3" Height="30" Margin="0,10"
+                Command="{Binding SortVideosCommand}"
+                Content="Sortieren"
+                IsEnabled="{Binding IsSorting, Converter={StaticResource InverseBooleanConverter}}" />
+
+        <!-- Fortschrittsanzeige -->
+        <ProgressBar Grid.Row="4" Height="20" Margin="0,5"
+                     Value="{Binding ProgressValue}"
+                     Visibility="{Binding IsSorting, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+        <!-- Log-Ausgabe -->
+        <ListBox Grid.Row="5" Margin="0,5"
+                 ItemsSource="{Binding LogMessages}" />
     </Grid>
 </Window>

@@ -2,8 +2,11 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
+using System.Windows;
+using MetadataExtractor;
+using MetadataExtractor.Formats.Exif;
+using Directory = System.IO.Directory;
 
 namespace WPF_VideoSort.ViewModels
 {
@@ -17,6 +20,53 @@ namespace WPF_VideoSort.ViewModels
 
         [ObservableProperty]
         private ObservableCollection<string> logMessages = new();
+
+        [ObservableProperty]
+        private double progressValue;
+
+        [ObservableProperty]
+        private bool isSorting;
+
+        [ObservableProperty]
+        private SortOption selectedSortOption = SortOption.DateTaken;
+        [ObservableProperty]
+        private string? remainingTime;
+
+        private DateTime? startTime;
+
+        public List<SortOption> AvailableSortOptions => Enum.GetValues(typeof(SortOption))
+                                                           .Cast<SortOption>()
+                                                           .ToList();
+
+        private readonly string[] supportedExtensions = new[]
+        { 
+            // Videos
+            ".mp4",  // Standard Video Format
+            ".mts",  // Sony/Panasonic Kamera Format
+            ".mov",  // QuickTime/Apple Format
+            ".avi",  // Windows Video Format
+            ".mkv",  // Matroska Video Format
+            ".wmv",  // Windows Media Video
+            ".flv",  // Flash Video Format
+            ".m4v",  // iPod/PSP Video Format
+            ".3gp",  // Mobil-Video Format
+            ".webm", // Web Video Format
+            
+            // Bilder
+            ".jpg",  // Standard JPEG
+            ".jpeg", // Standard JPEG (alternative Endung)
+            ".png",  // Portable Network Graphics
+            ".gif",  // Graphics Interchange Format
+            ".bmp",  // Windows Bitmap
+            ".tiff", // Tagged Image Format
+            ".tif",  // Tagged Image Format (alternative Endung)
+            ".heic", // High Efficiency Image Format (iOS)
+            ".raw",  // Raw Kamera Format
+            ".cr2",  // Canon Raw Format
+            ".nef",  // Nikon Raw Format
+            ".arw",  // Sony Raw Format
+            ".dng"   // Digital Negative Format
+        };
 
         [RelayCommand]
         private void SelectSourceFolder()
@@ -47,20 +97,30 @@ namespace WPF_VideoSort.ViewModels
                 return;
             }
 
+            IsSorting = true;
+            ProgressValue = 0;
+            startTime = DateTime.Now; // Startzeit setzen
+            RemainingTime = "Berechne...";
             LogMessages.Add("Starte Sortierung...");
 
             try
             {
                 await Task.Run(() =>
                 {
-                    var files = Directory.GetFiles(SourceFolder, "*.mp4");
+                    var files = supportedExtensions
+                        .SelectMany(ext => Directory.GetFiles(SourceFolder, $"*{ext}"))
+                        .ToList();
+
+                    var totalFiles = files.Count;
+                    var processedFiles = 0;
+
                     foreach (var file in files)
                     {
                         try
                         {
-                            var creationTime = File.GetCreationTime(file);
-                            string yearFolder = Path.Combine(DestinationFolder, creationTime.Year.ToString());
-                            string monthFolder = Path.Combine(yearFolder, creationTime.ToString("yyyy-MM"));
+                            var mediaDate = GetMediaDate(file);
+                            string yearFolder = Path.Combine(DestinationFolder, mediaDate.Year.ToString());
+                            string monthFolder = Path.Combine(yearFolder, mediaDate.ToString("yyyy-MM"));
 
                             Directory.CreateDirectory(monthFolder);
 
@@ -70,13 +130,19 @@ namespace WPF_VideoSort.ViewModels
                             {
                                 App.Current.Dispatcher.Invoke(() =>
                                     LogMessages.Add($"Datei existiert bereits: {destinationFile}"));
-                                continue;
+                            }
+                            else
+                            {
+                                File.Move(file, destinationFile);
+                                App.Current.Dispatcher.Invoke(() =>
+                                    LogMessages.Add($"Verschoben: {Path.GetFileName(file)} -> {destinationFile}"));
                             }
 
-                            File.Move(file, destinationFile);
-
+                            processedFiles++;
                             App.Current.Dispatcher.Invoke(() =>
-                                LogMessages.Add($"Verschoben: {Path.GetFileName(file)} -> {destinationFile}"));
+                            {
+                                ProgressValue = (double)processedFiles / totalFiles * 100;
+                            });
                         }
                         catch (Exception ex)
                         {
@@ -90,8 +156,51 @@ namespace WPF_VideoSort.ViewModels
             {
                 LogMessages.Add($"Kritischer Fehler: {ex.Message}");
             }
+            finally
+            {
+                IsSorting = false;
+                LogMessages.Add("Sortierung abgeschlossen.");
+            }
+        }
 
-            LogMessages.Add("Sortierung abgeschlossen.");
+        private DateTime GetMediaDate(string filePath)
+        {
+            try
+            {
+                switch (SelectedSortOption)
+                {
+                    case SortOption.DateTaken:
+                        // Versuche EXIF-Daten zu lesen
+                        var directories = ImageMetadataReader.ReadMetadata(filePath);
+                        foreach (var directory in directories)
+                        {
+                            if (directory is ExifSubIfdDirectory exifSubIfd)
+                            {
+                                DateTime? dateTime = exifSubIfd.GetDateTime(ExifDirectoryBase.TagDateTimeOriginal);
+                                if (dateTime != null)
+                                    return dateTime.Value;
+                            }
+                        }
+                        // Fallback auf Erstellungsdatum
+                        return File.GetCreationTime(filePath);
+
+                    case SortOption.DateCreated:
+                        return File.GetCreationTime(filePath);
+
+                    case SortOption.DateModified:
+                        return File.GetLastWriteTime(filePath);
+
+                    case SortOption.FileCreationDate:
+                        return File.GetCreationTime(filePath);
+
+                    default:
+                        return File.GetCreationTime(filePath);
+                }
+            }
+            catch
+            {
+                return File.GetCreationTime(filePath);
+            }
         }
     }
 }
