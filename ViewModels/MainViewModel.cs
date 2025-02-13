@@ -99,7 +99,7 @@ namespace WPF_VideoSort.ViewModels
 
             IsSorting = true;
             ProgressValue = 0;
-            startTime = DateTime.Now; // Startzeit setzen
+            startTime = DateTime.Now;
             RemainingTime = "Berechne...";
             LogMessages.Add("Starte Sortierung...");
 
@@ -142,6 +142,19 @@ namespace WPF_VideoSort.ViewModels
                             App.Current.Dispatcher.Invoke(() =>
                             {
                                 ProgressValue = (double)processedFiles / totalFiles * 100;
+
+                                // Restzeit berechnen
+                                if (startTime.HasValue && processedFiles > 0)
+                                {
+                                    var elapsed = DateTime.Now - startTime.Value;
+                                    var estimatedTotal = TimeSpan.FromTicks(elapsed.Ticks * totalFiles / processedFiles);
+                                    var remaining = estimatedTotal - elapsed;
+
+                                    if (remaining.TotalSeconds > 0)
+                                    {
+                                        RemainingTime = $"Restzeit: {FormatTimeSpan(remaining)}";
+                                    }
+                                }
                             });
                         }
                         catch (Exception ex)
@@ -159,8 +172,23 @@ namespace WPF_VideoSort.ViewModels
             finally
             {
                 IsSorting = false;
+                RemainingTime = string.Empty;
+                startTime = null;
                 LogMessages.Add("Sortierung abgeschlossen.");
             }
+        }
+
+        private string FormatTimeSpan(TimeSpan timeSpan)
+        {
+            if (timeSpan.TotalHours >= 1)
+            {
+                return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m";
+            }
+            if (timeSpan.TotalMinutes >= 1)
+            {
+                return $"{timeSpan.Minutes}m {timeSpan.Seconds}s";
+            }
+            return $"{timeSpan.Seconds}s";
         }
 
         private DateTime GetMediaDate(string filePath)
