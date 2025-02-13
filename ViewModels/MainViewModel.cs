@@ -18,6 +18,10 @@ namespace WPF_VideoSort.ViewModels
         private const string SETTINGS_FILE = "settings.json";
         private readonly MediaService _mediaService;
         private readonly FileExtensionService _fileExtensionService;
+        private readonly UndoManager _undoManager;
+
+        [ObservableProperty]
+        private bool canUndo;
 
         [ObservableProperty]
         private string? _sourceFolder;
@@ -36,15 +40,27 @@ namespace WPF_VideoSort.ViewModels
 
         [ObservableProperty]
         private SortSettingsViewModel _sortSettings;
+
         [ObservableProperty]
         private string _statusText = string.Empty;
 
         public MainViewModel()
         {
+            _undoManager = new UndoManager();
             _mediaService = new MediaService();
             _fileExtensionService = new FileExtensionService();
             SortSettings = new SortSettingsViewModel(_mediaService);
             LogMessages = new ObservableCollection<string>();
+
+            // UndoManager PropertyChanged Event abonnieren
+            _undoManager.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(UndoManager.CanUndo))
+                {
+                    CanUndo = _undoManager.CanUndo;
+                }
+            };
+
             LoadSettings();
         }
 
@@ -120,6 +136,8 @@ namespace WPF_VideoSort.ViewModels
 
             try
             {
+                _undoManager.StartOperationGroup("Dateisortierung");
+
                 var supportedExtensions = _fileExtensionService.GetAllSupportedExtensions();
                 var files = await Task.Run(() =>
                     supportedExtensions
@@ -137,7 +155,31 @@ namespace WPF_VideoSort.ViewModels
                 {
                     try
                     {
-                        await ProcessFileAsync(file, processedFiles);
+                        var sourceFile = file;
+                        var fileCategory = _fileExtensionService.GetCategory(file);
+                        var mediaDate = await Task.Run(() => GetMediaDate(file));
+                        var customValues = SortSettings.GetCustomValues(file);
+
+                        string targetFolder = Path.Combine(
+                            DestinationFolder,
+                            fileCategory.ToString(),
+                            SortSettings.Settings.GetFolderPath(mediaDate, customValues)
+                        );
+
+                        string destinationFile = Path.Combine(targetFolder, Path.GetFileName(file));
+
+                        if (SortSettings.Settings.EnableDuplicateCheck &&
+                            await CheckForDuplicatesAsync(file, processedFiles))
+                        {
+                            continue;
+                        }
+
+                        Directory.CreateDirectory(targetFolder);
+                        File.Move(sourceFile, destinationFile);
+
+                        _undoManager.AddOperation(new FileOperation(sourceFile, destinationFile));
+
+                        processedFiles.Add(destinationFile);
                         currentFile++;
                         UpdateProgress((double)currentFile / totalFiles * 100);
                         StatusText = $"{currentFile} von {totalFiles} Dateien sortiert";
@@ -146,17 +188,17 @@ namespace WPF_VideoSort.ViewModels
                     {
                         string errorMessage = $"Fehler bei {Path.GetFileName(file)}: {ex.Message}";
                         AddLogMessage(errorMessage);
-                        // Optional: Detaillierte Fehlerprotokollierung
                         System.Diagnostics.Debug.WriteLine(errorMessage);
                     }
                 }
+
+                _undoManager.CommitOperationGroup();
             }
             catch (Exception ex)
             {
                 string criticalErrorMessage = $"Kritischer Fehler: {ex.Message}";
                 AddLogMessage(criticalErrorMessage);
                 StatusText = "Sortierung fehlgeschlagen.";
-                // Optional: Logging-Framework oder Fehlerprotokollierung
                 System.Diagnostics.Debug.WriteLine(criticalErrorMessage);
             }
             finally
@@ -164,6 +206,7 @@ namespace WPF_VideoSort.ViewModels
                 IsSorting = false;
                 StatusText = "Sortierung abgeschlossen.";
                 AddLogMessage(StatusText);
+                CanUndo = _undoManager.CanUndo;
             }
         }
 
@@ -332,11 +375,11 @@ namespace WPF_VideoSort.ViewModels
             try
             {
                 var settingsData = new Dictionary<string, object>
-               {
-                   { "LastSourceFolder", SourceFolder ?? "" },
-                   { "LastDestinationFolder", DestinationFolder ?? "" },
-                   { "SortSettings", SortSettings.Settings }
-               };
+                {
+                    { "LastSourceFolder", SourceFolder ?? "" },
+                    { "LastDestinationFolder", DestinationFolder ?? "" },
+                    { "SortSettings", SortSettings.Settings }
+                };
 
                 var json = JsonSerializer.Serialize(settingsData);
                 File.WriteAllText(SETTINGS_FILE, json);
@@ -344,6 +387,32 @@ namespace WPF_VideoSort.ViewModels
             catch (Exception ex)
             {
                 AddLogMessage($"Fehler beim Speichern der Einstellungen: {ex.Message}");
+            }
+        }
+
+        [RelayCommand]
+        private async Task UndoLastOperationAsync()
+        {
+            if (!_undoManager.CanUndo) return;
+
+            IsSorting = true;
+            StatusText = "Mache Änderungen rückgängig...";
+            AddLogMessage(StatusText);
+
+            try
+            {
+                var (successful, failed) = await _undoManager.UndoLastOperationGroup();
+                AddLogMessage($"Rückgängig gemacht: {successful} erfolgreich, {failed} fehlgeschlagen");
+            }
+            catch (Exception ex)
+            {
+                AddLogMessage($"Fehler beim Rückgängigmachen: {ex.Message}");
+            }
+            finally
+            {
+                IsSorting = false;
+                StatusText = "Rückgängig machen abgeschlossen.";
+                CanUndo = _undoManager.CanUndo;
             }
         }
     }

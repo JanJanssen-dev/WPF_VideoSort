@@ -25,6 +25,7 @@ namespace WPF_VideoSort.Models
         public List<FileOperation> Operations { get; } = new();
         public DateTime GroupStartTime { get; }
         public string Description { get; }
+        public string BaseDestinationFolder { get; set; } = string.Empty;
 
         public OperationGroup(string description)
         {
@@ -35,13 +36,32 @@ namespace WPF_VideoSort.Models
         public void AddOperation(FileOperation operation)
         {
             Operations.Add(operation);
+
+            // Speichere den Basis-Zielordner für späteres Aufräumen
+            if (string.IsNullOrEmpty(BaseDestinationFolder) && !string.IsNullOrEmpty(operation.DestinationPath))
+            {
+                BaseDestinationFolder = Path.GetDirectoryName(operation.DestinationPath) ?? string.Empty;
+                while (!string.IsNullOrEmpty(BaseDestinationFolder))
+                {
+                    var parent = Directory.GetParent(BaseDestinationFolder);
+                    if (parent == null) break;
+
+                    // Suche nach dem obersten Ordner der Sortierung (wo die Kategorie-Ordner beginnen)
+                    if (Enum.GetNames(typeof(FileCategory)).Any(cat =>
+                        cat.Equals(Path.GetFileName(BaseDestinationFolder), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        break;
+                    }
+                    BaseDestinationFolder = parent.FullName;
+                }
+            }
         }
     }
 
     public partial class UndoManager : ObservableObject
     {
         private Stack<OperationGroup> undoStack = new();
-        private OperationGroup currentGroup;
+        private OperationGroup? currentGroup;
 
         [ObservableProperty]
         private bool canUndo;
@@ -61,7 +81,7 @@ namespace WPF_VideoSort.Models
                 StartOperationGroup("Einzeloperation");
             }
 
-            currentGroup.AddOperation(operation);
+            currentGroup?.AddOperation(operation);
         }
 
         public void CommitOperationGroup()
@@ -93,29 +113,107 @@ namespace WPF_VideoSort.Models
             int successful = 0;
             int failed = 0;
 
+            // Operationen in umgekehrter Reihenfolge ausführen
             foreach (var operation in group.Operations.AsEnumerable().Reverse())
             {
                 try
                 {
-                    if (File.Exists(operation.DestinationPath))
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(operation.SourcePath));
-                        File.Move(operation.DestinationPath, operation.SourcePath);
-                        successful++;
-                    }
-                    else
+                    // Prüfen ob die Datei am Zielort existiert
+                    if (!File.Exists(operation.DestinationPath))
                     {
                         failed++;
+                        continue;
                     }
+
+                    // Zielverzeichnis erstellen, falls es nicht existiert
+                    var sourceDir = Path.GetDirectoryName(operation.SourcePath);
+                    if (!string.IsNullOrEmpty(sourceDir) && !Directory.Exists(sourceDir))
+                    {
+                        Directory.CreateDirectory(sourceDir);
+                    }
+
+                    // Wenn eine Datei am ursprünglichen Ort existiert, diese umbenennen
+                    string finalSourcePath = operation.SourcePath;
+                    if (File.Exists(operation.SourcePath))
+                    {
+                        string directory = Path.GetDirectoryName(operation.SourcePath) ?? "";
+                        string fileName = Path.GetFileNameWithoutExtension(operation.SourcePath);
+                        string extension = Path.GetExtension(operation.SourcePath);
+                        int counter = 1;
+
+                        do
+                        {
+                            finalSourcePath = Path.Combine(directory, $"{fileName}_restored_{counter++}{extension}");
+                        } while (File.Exists(finalSourcePath));
+                    }
+
+                    // Datei zurück verschieben
+                    await Task.Run(() => File.Move(operation.DestinationPath, finalSourcePath));
+                    successful++;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"Fehler beim Rückgängigmachen: {ex.Message}");
                     failed++;
                 }
             }
 
+            // Aufräumen der leeren Ordner nach dem Zurückverschieben
+            if (!string.IsNullOrEmpty(group.BaseDestinationFolder))
+            {
+                await CleanupEmptyDirectoriesAsync(group.BaseDestinationFolder);
+            }
+
             UpdateProperties();
             return (successful, failed);
+        }
+
+        private async Task CleanupEmptyDirectoriesAsync(string startPath)
+        {
+            if (string.IsNullOrEmpty(startPath) || !Directory.Exists(startPath))
+                return;
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    // Von unten nach oben durch die Verzeichnisstruktur gehen
+                    foreach (var dir in Directory.GetDirectories(startPath, "*", SearchOption.AllDirectories)
+                                               .OrderByDescending(d => d.Length))
+                    {
+                        try
+                        {
+                            var dirInfo = new DirectoryInfo(dir);
+                            if (IsDirectoryEmpty(dirInfo))
+                            {
+                                dirInfo.Delete();
+                                System.Diagnostics.Debug.WriteLine($"Leerer Ordner gelöscht: {dir}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Fehler beim Löschen des Ordners {dir}: {ex.Message}");
+                        }
+                    }
+
+                    // Zum Schluss den Startordner prüfen
+                    var startDirInfo = new DirectoryInfo(startPath);
+                    if (IsDirectoryEmpty(startDirInfo))
+                    {
+                        startDirInfo.Delete();
+                        System.Diagnostics.Debug.WriteLine($"Leerer Ordner gelöscht: {startPath}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Fehler beim Aufräumen der Ordner: {ex.Message}");
+            }
+        }
+
+        private bool IsDirectoryEmpty(DirectoryInfo dirInfo)
+        {
+            return !dirInfo.GetFiles().Any() && !dirInfo.GetDirectories().Any();
         }
 
         public void Clear()

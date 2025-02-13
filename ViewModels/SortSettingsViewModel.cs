@@ -1,6 +1,4 @@
-﻿
-//TODO irgendwas komisch mit den Patterns, Undo funktion wieder rein nehmen 
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -40,91 +38,92 @@ namespace WPF_VideoSort.ViewModels
         public SortSettingsViewModel(MediaService mediaService)
         {
             _mediaService = mediaService;
-            LoadSavedPatterns();
-            AddMissingDefaultPatterns();
+            InitializePatterns();
         }
 
-        private void AddMissingDefaultPatterns()
+        private void InitializePatterns()
         {
-            // Liste der Standard-Musternamen
-            var standardPatternNames = new[]
-            {
-                "Standard Datum",
-                "Ausführliches Datum",
-                "Mit Tag",
-                "Mit Standort",
-                "Event-basiert",
-                "Kamera-Modell",
-                "Datei-Typ",
-                "Quartal",
-                "Projekt-basiert",
-                "Jahr-Monat kombiniert"
-            };
+            var loadedPatterns = LoadPatternsFromFile();
 
-            // Prüfe, welche Standard-Muster fehlen
-            var missingPatterns = standardPatternNames
-                .Where(name => !SavedPatterns.Any(p => p.Name == name))
-                .ToList();
-
-            // Füge fehlende Muster hinzu
-            foreach (var missingPatternName in missingPatterns)
+            if (loadedPatterns.Count == 0)
             {
-                var missingPattern = GetDefaultPatternByName(missingPatternName);
-                if (missingPattern != null)
-                {
-                    SavedPatterns.Add(missingPattern);
-                }
+                loadedPatterns = CreateDefaultPatterns();
+            }
+            else
+            {
+                // Füge fehlende Standard-Patterns hinzu
+                var defaultPatterns = CreateDefaultPatterns();
+                var missingPatterns = defaultPatterns
+                    .Where(dp => !loadedPatterns.Any(lp => lp.Name == dp.Name))
+                    .ToList();
+
+                loadedPatterns.AddRange(missingPatterns);
             }
 
-            // Speichere die aktualisierten Muster
-            SavePatterns();
+            SavedPatterns = new ObservableCollection<FolderPattern>(loadedPatterns);
+            SavePatternsToFile();
         }
 
-        private FolderPattern? GetDefaultPatternByName(string name)
+        private List<FolderPattern> LoadPatternsFromFile()
         {
-            return name switch
+            try
             {
-                "Standard Datum" => new FolderPattern(
-                    "Standard Datum",
-                    "yyyy/MM",
+                if (File.Exists(PATTERNS_FILE))
+                {
+                    var json = File.ReadAllText(PATTERNS_FILE);
+                    var patterns = JsonSerializer.Deserialize<List<FolderPattern>>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    return patterns ?? new List<FolderPattern>();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Fehler beim Laden der Muster: {ex.Message}");
+            }
+
+            return new List<FolderPattern>();
+        }
+
+        private void SavePatternsToFile()
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(SavedPatterns.ToList());
+                File.WriteAllText(PATTERNS_FILE, json);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Fehler beim Speichern der Muster: {ex.Message}");
+            }
+        }
+
+        private List<FolderPattern> CreateDefaultPatterns()
+        {
+            return new List<FolderPattern>
+            {
+                new("Standard Datum", "yyyy/MM",
                     "Sortiert nach Jahr und Monat (z.B. 2024/03)"),
-                "Ausführliches Datum" => new FolderPattern(
-                    "Ausführliches Datum",
-                    "yyyy/yyyy-MM",
+                new("Ausführliches Datum", "yyyy/yyyy-MM",
                     "Jahr als Hauptordner, dann Jahr-Monat (z.B. 2024/2024-03)"),
-                "Mit Tag" => new FolderPattern(
-                    "Mit Tag",
-                    "yyyy/MM/dd",
+                new("Mit Tag", "yyyy/MM/dd",
                     "Sortiert nach Jahr, Monat und Tag (z.B. 2024/03/15)"),
-                "Mit Standort" => new FolderPattern(
-                    "Mit Standort",
-                    "{Location}/yyyy/MM",
+                new("Mit Standort", "{Location}/yyyy/MM",
                     "Sortiert nach Standort, dann nach Datum (z.B. Berlin/2024/03)"),
-                "Event-basiert" => new FolderPattern(
-                    "Event-basiert",
-                    "yyyy/{Event}",
+                new("Event-basiert", "yyyy/{Event}",
                     "Jahr als Hauptordner, dann Ereignisname (z.B. 2024/Urlaub_Italien)"),
-                "Kamera-Modell" => new FolderPattern(
-                    "Kamera-Modell",
-                    "{CameraModel}/yyyy/MM",
+                new("Kamera-Modell", "{CameraModel}/yyyy/MM",
                     "Sortiert nach Kameramodell, dann nach Datum (z.B. Canon_EOS_R5/2024/03)"),
-                "Datei-Typ" => new FolderPattern(
-                    "Datei-Typ",
-                    "{FileType}/yyyy/MM",
+                new("Datei-Typ", "{FileType}/yyyy/MM",
                     "Sortiert nach Dateityp (Fotos/Videos), dann nach Datum (z.B. Fotos/2024/03)"),
-                "Quartal" => new FolderPattern(
-                    "Quartal",
-                    "yyyy/Q{Quarter}",
+                new("Quartal", "yyyy/Q{Quarter}",
                     "Sortiert nach Jahr und Quartal (z.B. 2024/Q1)"),
-                "Projekt-basiert" => new FolderPattern(
-                    "Projekt-basiert",
-                    "{Project}/yyyy-MM-dd",
+                new("Projekt-basiert", "{Project}/yyyy-MM-dd",
                     "Projektordner mit Datum (z.B. Projekt_XY/2024-03-15)"),
-                "Jahr-Monat kombiniert" => new FolderPattern(
-                    "Jahr-Monat kombiniert",
-                    "yyyy-MM",
-                    "Kombiniertes Jahr-Monats-Format (z.B. 2024-03)"),
-                _ => null
+                new("Jahr-Monat kombiniert", "yyyy-MM",
+                    "Kombiniertes Jahr-Monats-Format (z.B. 2024-03)")
             };
         }
 
@@ -142,7 +141,7 @@ namespace WPF_VideoSort.ViewModels
             );
 
             SavedPatterns.Add(pattern);
-            SavePatterns();
+            SavePatternsToFile();
 
             // Felder zurücksetzen
             NewPatternName = string.Empty;
@@ -156,7 +155,7 @@ namespace WPF_VideoSort.ViewModels
             if (pattern != null)
             {
                 SavedPatterns.Remove(pattern);
-                SavePatterns();
+                SavePatternsToFile();
             }
         }
 
@@ -165,135 +164,10 @@ namespace WPF_VideoSort.ViewModels
         {
             if (pattern != null)
             {
-                System.Diagnostics.Debug.WriteLine($"Applying pattern: {pattern.Name}");
-                System.Diagnostics.Debug.WriteLine($"Pattern value: {pattern.Pattern}");
-
-                // Setzen Sie den benutzerdefinierten Pfad
                 Settings.CustomPattern = pattern.Pattern;
-
-                // Explizit auf CustomPattern setzen
                 Settings.SortOption = SortOption.CustomPattern;
 
-                // Explizite Benachrichtigungen über Änderungen
                 OnPropertyChanged(nameof(Settings));
-                OnPropertyChanged(nameof(Settings.CustomPattern));
-                OnPropertyChanged(nameof(Settings.SortOption));
-
-                System.Diagnostics.Debug.WriteLine($"Current CustomPattern: {Settings.CustomPattern}");
-                System.Diagnostics.Debug.WriteLine($"Current SortOption: {Settings.SortOption}");
-            }
-        }
-
-        //[RelayCommand]
-        //private void ApplyPattern(FolderPattern pattern)
-        //{
-        //    if (pattern != null)
-        //    {
-        //        Settings.CustomPattern = pattern.Pattern;
-        //        Settings.SortOption = SortOption.CustomPattern;
-        //    }
-        //}
-
-        private void LoadSavedPatterns()
-        {
-            try
-            {
-                if (File.Exists(PATTERNS_FILE))
-                {
-                    var json = File.ReadAllText(PATTERNS_FILE);
-
-                    var patterns = JsonSerializer.Deserialize<List<FolderPattern>>(json, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-
-                    if (patterns != null && patterns.Any())
-                    {
-                        SavedPatterns = new ObservableCollection<FolderPattern>(patterns);
-                    }
-                    else
-                    {
-                        AddDefaultPatterns();
-                    }
-                }
-                else
-                {
-                    AddDefaultPatterns();
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Fehler beim Laden der Muster: {ex.Message}");
-                AddDefaultPatterns();
-            }
-        }
-
-        private void AddDefaultPatterns()
-        {
-            SavedPatterns.Add(new FolderPattern(
-                "Standard Datum",
-                "yyyy/MM",
-                "Sortiert nach Jahr und Monat (z.B. 2024/03)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Ausführliches Datum",
-                "yyyy/yyyy-MM",
-                "Jahr als Hauptordner, dann Jahr-Monat (z.B. 2024/2024-03)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Mit Tag",
-                "yyyy/MM/dd",
-                "Sortiert nach Jahr, Monat und Tag (z.B. 2024/03/15)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Mit Standort",
-                "{Location}/yyyy/MM",
-                "Sortiert nach Standort, dann nach Datum (z.B. Berlin/2024/03)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Event-basiert",
-                "yyyy/{Event}",
-                "Jahr als Hauptordner, dann Ereignisname (z.B. 2024/Urlaub_Italien)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Kamera-Modell",
-                "{CameraModel}/yyyy/MM",
-                "Sortiert nach Kameramodell, dann nach Datum (z.B. Canon_EOS_R5/2024/03)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Datei-Typ",
-                "{FileType}/yyyy/MM",
-                "Sortiert nach Dateityp (Fotos/Videos), dann nach Datum (z.B. Fotos/2024/03)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Quartal",
-                "yyyy/Q{Quarter}",
-                "Sortiert nach Jahr und Quartal (z.B. 2024/Q1)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Projekt-basiert",
-                "{Project}/yyyy-MM-dd",
-                "Projektordner mit Datum (z.B. Projekt_XY/2024-03-15)"));
-
-            SavedPatterns.Add(new FolderPattern(
-                "Jahr-Monat kombiniert",
-                "yyyy-MM",
-                "Kombiniertes Jahr-Monats-Format (z.B. 2024-03)"));
-
-            SavePatterns();
-        }
-
-        private void SavePatterns()
-        {
-            try
-            {
-                var json = JsonSerializer.Serialize(SavedPatterns.ToList());
-                File.WriteAllText(PATTERNS_FILE, json);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Fehler beim Speichern der Muster: {ex.Message}");
-                // Fehler beim Speichern - könnte hier einen Event auslösen
             }
         }
 
@@ -311,6 +185,10 @@ namespace WPF_VideoSort.ViewModels
             }
 
             values["Event"] = "Unbekannt";
+            values["Project"] = "Unbekannt";
+            values["FileType"] = "Sonstiges";
+            values["CameraModel"] = "Unbekannt";
+            values["Quarter"] = ((DateTime.Now.Month - 1) / 3 + 1).ToString();
 
             return values;
         }

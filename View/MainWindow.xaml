@@ -10,7 +10,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Video Sorter"
     Width="600"
-    Height="600"
+    Height="1040"
+    WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
 
     <Window.Resources>
@@ -202,13 +203,33 @@
         </Expander>
 
         <!--  Start-Button  -->
-        <Button
+        <StackPanel
             Grid.Row="3"
-            Height="30"
             Margin="0,10"
-            Command="{Binding SortFilesCommand}"
-            Content="Sortieren"
-            IsEnabled="{Binding IsSorting, Converter={StaticResource InverseBooleanConverter}}" />
+            Orientation="Horizontal">
+            <Button
+                Height="30"
+                Command="{Binding SortFilesCommand}"
+                Content="Sortieren"
+                IsEnabled="{Binding IsSorting, Converter={StaticResource InverseBooleanConverter}}" />
+
+            <Button
+                Height="30"
+                Margin="10,0,0,0"
+                Command="{Binding UndoLastOperationCommand}"
+                Content="Rückgängig"
+                IsEnabled="{Binding CanUndo}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSorting}" Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
 
         <!--  Fortschrittsanzeige  -->
         <ProgressBar
