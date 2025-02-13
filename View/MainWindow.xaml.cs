@@ -13,6 +13,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using WPF_VideoSort;
 using WPF_VideoSort.ViewModels;
 using WPF_VideoSort.Converter;
+using WPF_VideoSort.Behaviors;
+using WPF_VideoSort.Models;
 
 
 

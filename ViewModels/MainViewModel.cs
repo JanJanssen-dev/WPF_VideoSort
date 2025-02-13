@@ -7,11 +7,15 @@ using System.Windows;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using Directory = System.IO.Directory;
+using System.Text.Json;
+using WPF_VideoSort.Models;
 
 namespace WPF_VideoSort.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
+        private const string SETTINGS_FILE = "settings.json";
+
         [ObservableProperty]
         private string? sourceFolder;
 
@@ -29,44 +33,45 @@ namespace WPF_VideoSort.ViewModels
 
         [ObservableProperty]
         private SortOption selectedSortOption = SortOption.DateTaken;
-        [ObservableProperty]
-        private string? remainingTime;
-
-        private DateTime? startTime;
 
         public List<SortOption> AvailableSortOptions => Enum.GetValues(typeof(SortOption))
                                                            .Cast<SortOption>()
                                                            .ToList();
 
+        public MainViewModel()
+        {
+            LoadSettings();
+        }
+
         private readonly string[] supportedExtensions = new[]
         { 
             // Videos
-            ".mp4",  // Standard Video Format
-            ".mts",  // Sony/Panasonic Kamera Format
-            ".mov",  // QuickTime/Apple Format
-            ".avi",  // Windows Video Format
-            ".mkv",  // Matroska Video Format
-            ".wmv",  // Windows Media Video
-            ".flv",  // Flash Video Format
-            ".m4v",  // iPod/PSP Video Format
-            ".3gp",  // Mobil-Video Format
-            ".webm", // Web Video Format
-            
+            ".mp4", ".mts", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".m4v", ".3gp", ".webm", 
             // Bilder
-            ".jpg",  // Standard JPEG
-            ".jpeg", // Standard JPEG (alternative Endung)
-            ".png",  // Portable Network Graphics
-            ".gif",  // Graphics Interchange Format
-            ".bmp",  // Windows Bitmap
-            ".tiff", // Tagged Image Format
-            ".tif",  // Tagged Image Format (alternative Endung)
-            ".heic", // High Efficiency Image Format (iOS)
-            ".raw",  // Raw Kamera Format
-            ".cr2",  // Canon Raw Format
-            ".nef",  // Nikon Raw Format
-            ".arw",  // Sony Raw Format
-            ".dng"   // Digital Negative Format
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".heic", ".raw",
+            ".cr2", ".nef", ".arw", ".dng"
         };
+
+        [RelayCommand]
+        private void HandleFolderDrop(object parameter)
+        {
+            if (parameter is string[] files && files.Length > 0 && Directory.Exists(files[0]))
+            {
+                SourceFolder = files[0];
+                DestinationFolder = files[0];
+                SaveSettings();
+            }
+        }
+
+        [RelayCommand]
+        private void HandleDestinationFolderDrop(object parameter)
+        {
+            if (parameter is string[] files && files.Length > 0 && Directory.Exists(files[0]))
+            {
+                DestinationFolder = files[0];
+                SaveSettings();
+            }
+        }
 
         [RelayCommand]
         private void SelectSourceFolder()
@@ -75,6 +80,8 @@ namespace WPF_VideoSort.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 SourceFolder = dialog.FolderName;
+                DestinationFolder = dialog.FolderName;
+                SaveSettings();
             }
         }
 
@@ -85,6 +92,7 @@ namespace WPF_VideoSort.ViewModels
             if (dialog.ShowDialog() == true)
             {
                 DestinationFolder = dialog.FolderName;
+                SaveSettings();
             }
         }
 
@@ -97,10 +105,9 @@ namespace WPF_VideoSort.ViewModels
                 return;
             }
 
+            SaveSettings();
             IsSorting = true;
             ProgressValue = 0;
-            startTime = DateTime.Now;
-            RemainingTime = "Berechne...";
             LogMessages.Add("Starte Sortierung...");
 
             try
@@ -142,19 +149,6 @@ namespace WPF_VideoSort.ViewModels
                             App.Current.Dispatcher.Invoke(() =>
                             {
                                 ProgressValue = (double)processedFiles / totalFiles * 100;
-
-                                // Restzeit berechnen
-                                if (startTime.HasValue && processedFiles > 0)
-                                {
-                                    var elapsed = DateTime.Now - startTime.Value;
-                                    var estimatedTotal = TimeSpan.FromTicks(elapsed.Ticks * totalFiles / processedFiles);
-                                    var remaining = estimatedTotal - elapsed;
-
-                                    if (remaining.TotalSeconds > 0)
-                                    {
-                                        RemainingTime = $"Restzeit: {FormatTimeSpan(remaining)}";
-                                    }
-                                }
                             });
                         }
                         catch (Exception ex)
@@ -172,23 +166,8 @@ namespace WPF_VideoSort.ViewModels
             finally
             {
                 IsSorting = false;
-                RemainingTime = string.Empty;
-                startTime = null;
                 LogMessages.Add("Sortierung abgeschlossen.");
             }
-        }
-
-        private string FormatTimeSpan(TimeSpan timeSpan)
-        {
-            if (timeSpan.TotalHours >= 1)
-            {
-                return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m";
-            }
-            if (timeSpan.TotalMinutes >= 1)
-            {
-                return $"{timeSpan.Minutes}m {timeSpan.Seconds}s";
-            }
-            return $"{timeSpan.Seconds}s";
         }
 
         private DateTime GetMediaDate(string filePath)
@@ -198,7 +177,6 @@ namespace WPF_VideoSort.ViewModels
                 switch (SelectedSortOption)
                 {
                     case SortOption.DateTaken:
-                        // Versuche EXIF-Daten zu lesen
                         var directories = ImageMetadataReader.ReadMetadata(filePath);
                         foreach (var directory in directories)
                         {
@@ -209,7 +187,6 @@ namespace WPF_VideoSort.ViewModels
                                     return dateTime.Value;
                             }
                         }
-                        // Fallback auf Erstellungsdatum
                         return File.GetCreationTime(filePath);
 
                     case SortOption.DateCreated:
@@ -228,6 +205,46 @@ namespace WPF_VideoSort.ViewModels
             catch
             {
                 return File.GetCreationTime(filePath);
+            }
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(SETTINGS_FILE))
+                {
+                    var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SETTINGS_FILE));
+                    if (settings != null)
+                    {
+                        SourceFolder = settings.LastSourceFolder;
+                        DestinationFolder = settings.LastDestinationFolder;
+                        SelectedSortOption = settings.LastSortOption;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessages.Add($"Fehler beim Laden der Einstellungen: {ex.Message}");
+            }
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                var settings = new Settings
+                {
+                    LastSourceFolder = SourceFolder,
+                    LastDestinationFolder = DestinationFolder,
+                    LastSortOption = SelectedSortOption
+                };
+
+                File.WriteAllText(SETTINGS_FILE, JsonSerializer.Serialize(settings));
+            }
+            catch (Exception ex)
+            {
+                LogMessages.Add($"Fehler beim Speichern der Einstellungen: {ex.Message}");
             }
         }
     }
