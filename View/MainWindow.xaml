@@ -82,60 +82,123 @@
             Grid.Row="2"
             Margin="0,10"
             Header="Erweiterte Einstellungen">
-            <StackPanel Margin="10">
-                <!--  Sortier-Optionen  -->
-                <GroupBox Margin="0,5" Header="Sortierung">
-                    <StackPanel Margin="5">
-                        <ComboBox
-                            Margin="0,5"
-                            ItemsSource="{Binding SortSettings.AvailableSortOptions}"
-                            SelectedItem="{Binding SortSettings.Settings.SortOption}" />
+            <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="10">
+                    <!--  Sortier-Optionen  -->
+                    <GroupBox Margin="0,5" Header="Sortierung">
+                        <StackPanel Margin="5">
+                            <ComboBox
+                                Margin="0,5"
+                                ItemsSource="{Binding SortSettings.AvailableSortOptions}"
+                                SelectedItem="{Binding SortSettings.Settings.SortOption, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                        <!--  Benutzerdefiniertes Muster  -->
-                        <StackPanel Margin="0,5" Visibility="{Binding SortSettings.Settings.SortOption, Converter={StaticResource SortOptionToVisibilityConverter}}">
-                            <TextBlock Margin="0,0,0,5" Text="Benutzerdefiniertes Muster:" />
-                            <TextBox Margin="0,0,0,5" Text="{Binding SortSettings.Settings.CustomPattern}" />
-                            <TextBlock Margin="0,5" Text="Beispiele:" />
-                            <ListBox Height="100" ItemsSource="{Binding SortSettings.CustomPatternExamples}" />
+                            <!--  Benutzerdefinierte Muster  -->
+                            <GroupBox
+                                Margin="0,10,0,0"
+                                Header="Benutzerdefinierte Muster"
+                                Visibility="{Binding SortSettings.Settings.SortOption, Converter={StaticResource SortOptionToVisibilityConverter}}">
+                                <StackPanel>
+                                    <!--  Gespeicherte Muster  -->
+                                    <GroupBox Header="Gespeicherte Muster">
+                                        <ListView
+                                            MaxHeight="150"
+                                            ItemsSource="{Binding SortSettings.SavedPatterns}"
+                                            SelectedItem="{Binding SortSettings.SelectedPattern}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="Bold" Text="{Binding Name}" />
+                                                            <TextBlock Margin="10,0,0,0" Text="{Binding Pattern}" />
+                                                            <TextBlock
+                                                                Margin="10,0,0,0"
+                                                                Opacity="0.7"
+                                                                Text="{Binding Description}" />
+                                                        </StackPanel>
+                                                        <Button
+                                                            Grid.Column="1"
+                                                            Margin="5,0"
+                                                            Command="{Binding DataContext.SortSettings.ApplyPatternCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Content="Anwenden" />
+                                                        <Button
+                                                            Grid.Column="2"
+                                                            Command="{Binding DataContext.SortSettings.DeletePatternCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Content="Löschen" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </GroupBox>
+
+                                    <!--  Neues Muster hinzufügen  -->
+                                    <GroupBox Margin="0,10,0,0" Header="Neues Muster">
+                                        <StackPanel>
+                                            <DockPanel Margin="0,5">
+                                                <TextBlock Width="80" Text="Name:" />
+                                                <TextBox Text="{Binding SortSettings.NewPatternName}" />
+                                            </DockPanel>
+                                            <DockPanel Margin="0,5">
+                                                <TextBlock Width="80" Text="Muster:" />
+                                                <TextBox Text="{Binding SortSettings.NewPatternValue}" />
+                                            </DockPanel>
+                                            <DockPanel Margin="0,5">
+                                                <TextBlock Width="80" Text="Beschreibung:" />
+                                                <TextBox Text="{Binding SortSettings.NewPatternDescription}" />
+                                            </DockPanel>
+                                            <Button
+                                                Margin="0,10,0,0"
+                                                Command="{Binding SortSettings.SaveNewPatternCommand}"
+                                                Content="Muster speichern" />
+                                        </StackPanel>
+                                    </GroupBox>
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
-                    </StackPanel>
-                </GroupBox>
+                    </GroupBox>
 
-                <!--  Duplikaterkennung  -->
-                <GroupBox Margin="0,5" Header="Duplikaterkennung">
-                    <StackPanel Margin="5">
-                        <CheckBox
-                            Margin="0,5"
-                            Content="Duplikate erkennen"
-                            IsChecked="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
-                        <CheckBox
-                            Margin="20,5,0,5"
-                            Content="Hash-basierte Erkennung (genauer aber langsamer)"
-                            IsChecked="{Binding SortSettings.Settings.UseHashForDuplicates}"
-                            IsEnabled="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
-                    </StackPanel>
-                </GroupBox>
-
-                <!--  GPS-Einstellungen  -->
-                <GroupBox Margin="0,5" Header="GPS-Daten">
-                    <StackPanel Margin="5">
-                        <CheckBox
-                            Margin="0,5"
-                            Content="GPS-Daten verwenden"
-                            IsChecked="{Binding SortSettings.Settings.UseGpsData}" />
-                        <StackPanel
-                            Margin="20,5,0,5"
-                            IsEnabled="{Binding SortSettings.Settings.UseGpsData}"
-                            Orientation="Horizontal">
-                            <TextBlock VerticalAlignment="Center" Text="Cluster-Radius (Meter):" />
-                            <TextBox
-                                Width="60"
-                                Margin="5,0"
-                                Text="{Binding SortSettings.Settings.GpsClusterRadius}" />
+                    <!--  Duplikaterkennung  -->
+                    <GroupBox Margin="0,5" Header="Duplikaterkennung">
+                        <StackPanel Margin="5">
+                            <CheckBox
+                                Margin="0,5"
+                                Content="Duplikate erkennen"
+                                IsChecked="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
+                            <CheckBox
+                                Margin="20,5,0,5"
+                                Content="Hash-basierte Erkennung (genauer aber langsamer)"
+                                IsChecked="{Binding SortSettings.Settings.UseHashForDuplicates}"
+                                IsEnabled="{Binding SortSettings.Settings.EnableDuplicateCheck}" />
                         </StackPanel>
-                    </StackPanel>
-                </GroupBox>
-            </StackPanel>
+                    </GroupBox>
+
+                    <!--  GPS-Einstellungen  -->
+                    <GroupBox Margin="0,5" Header="GPS-Daten">
+                        <StackPanel Margin="5">
+                            <CheckBox
+                                Margin="0,5"
+                                Content="GPS-Daten verwenden"
+                                IsChecked="{Binding SortSettings.Settings.UseGpsData}" />
+                            <StackPanel
+                                Margin="20,5,0,5"
+                                IsEnabled="{Binding SortSettings.Settings.UseGpsData}"
+                                Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center" Text="Cluster-Radius (Meter):" />
+                                <TextBox
+                                    Width="60"
+                                    Margin="5,0"
+                                    Text="{Binding SortSettings.Settings.GpsClusterRadius}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </ScrollViewer>
         </Expander>
 
         <!--  Start-Button  -->
@@ -143,7 +206,7 @@
             Grid.Row="3"
             Height="30"
             Margin="0,10"
-            Command="{Binding SortVideosCommand}"
+            Command="{Binding SortFilesCommand}"
             Content="Sortieren"
             IsEnabled="{Binding IsSorting, Converter={StaticResource InverseBooleanConverter}}" />
 
