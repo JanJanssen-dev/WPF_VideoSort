@@ -11,13 +11,13 @@ namespace WPF_VideoSort.Models
     public partial class FolderPattern : ObservableObject
     {
         [ObservableProperty]
-        private string name;
+        private string name = string.Empty;
 
         [ObservableProperty]
-        private string pattern;
+        private string pattern = string.Empty;
 
         [ObservableProperty]
-        private string description;
+        private string description = string.Empty;
 
         public FolderPattern()
         {

@@ -8,7 +8,7 @@ namespace WPF_VideoSort.Models
     public partial class SortSettings : ObservableObject
     {
         [ObservableProperty]
-        private SortOption _sortOption = SortOption.DateCreated;
+        private SortOption sortOption = SortOption.DateCreated;
 
         [ObservableProperty]
         private string _customPattern = "yyyy/MM";

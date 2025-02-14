@@ -14,7 +14,7 @@ namespace WPF_VideoSort.ViewModels
         private readonly MediaService _mediaService;
 
         [ObservableProperty]
-        private SortSettings _settings = new();
+        private SortSettings settings = new();
 
         [ObservableProperty]
         private ObservableCollection<FolderPattern> _savedPatterns = new();

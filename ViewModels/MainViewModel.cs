@@ -24,7 +24,7 @@ namespace WPF_VideoSort.ViewModels
         private bool canUndo;
 
         [ObservableProperty]
-        private string? _sourceFolder;
+        private string? sourceFolder;
 
         [ObservableProperty]
         private string? _destinationFolder;
@@ -119,7 +119,7 @@ namespace WPF_VideoSort.ViewModels
         }
 
         [RelayCommand(CanExecute = nameof(CanSortFiles))]
-        private async Task SortFilesAsync()
+        private async Task SortFiles()
         {
             if (string.IsNullOrEmpty(SourceFolder) || string.IsNullOrEmpty(DestinationFolder))
             {
@@ -223,6 +223,12 @@ namespace WPF_VideoSort.ViewModels
 
             var mediaDate = await Task.Run(() => GetMediaDate(file));
             var customValues = SortSettings.GetCustomValues(file);
+
+            if (DestinationFolder == null)
+            {
+                AddLogMessage("Zielordner ist nicht gesetzt.");
+                return;
+            }
 
             string targetFolder = Path.Combine(
                 DestinationFolder,
