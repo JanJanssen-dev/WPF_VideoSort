@@ -11,7 +11,7 @@ namespace WPF_VideoSort.Models
         private SortOption sortOption = SortOption.DateCreated;
 
         [ObservableProperty]
-        private string _customPattern = "yyyy/MM";
+        private string customPattern = "yyyy/MM";
 
         partial void OnSortOptionChanged(SortOption value)
         {
@@ -24,23 +24,23 @@ namespace WPF_VideoSort.Models
         }
 
         [ObservableProperty]
-        private bool _enableDuplicateCheck;
+        private bool enableDuplicateCheck;
 
         [ObservableProperty]
-        private bool _useHashForDuplicates;
+        private bool useHashForDuplicates;
 
         [ObservableProperty]
-        private bool _useGpsData;
+        private bool useGpsData;
 
         [ObservableProperty]
-        private int _gpsClusterRadius = 1000; // Meter
+        private int gpsClusterRadius = 1000; // Meter
 
         [ObservableProperty]
-        private DuplicateHandling _handleDuplicates = DuplicateHandling.Rename;
+        private DuplicateHandling handleDuplicates = DuplicateHandling.Rename;
 
         public string GetFolderPath(
-    DateTime date,
-    Dictionary<string, string>? customValues = null)
+        DateTime date,
+        Dictionary<string, string>? customValues = null)
         {
             string path = SortOption switch
             {

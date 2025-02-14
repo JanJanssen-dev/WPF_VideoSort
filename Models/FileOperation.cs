@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -6,38 +7,49 @@ using System.Linq;
 
 namespace WPF_VideoSort.Models
 {
-    public class FileOperation
+    public partial class FileOperation : ObservableObject
     {
-        public string SourcePath { get; set; }
-        public string DestinationPath { get; set; }
-        public DateTime OperationTime { get; set; }
+        [ObservableProperty]
+        private string sourcePath = string.Empty;
+
+        [ObservableProperty]
+        private string destinationPath = string.Empty;
+
+        [ObservableProperty]
+        private DateTime operationTime;
 
         public FileOperation(string sourcePath, string destinationPath)
         {
-            SourcePath = sourcePath;
-            DestinationPath = destinationPath;
-            OperationTime = DateTime.Now;
+            this.sourcePath = sourcePath;
+            this.destinationPath = destinationPath;
+            this.operationTime = DateTime.Now;
         }
     }
 
-    public class OperationGroup
+    public partial class OperationGroup : ObservableObject
     {
-        public List<FileOperation> Operations { get; } = new();
-        public DateTime GroupStartTime { get; }
-        public string Description { get; }
-        public string BaseDestinationFolder { get; set; } = string.Empty;
+        [ObservableProperty]
+        private List<FileOperation> operations = new();
+
+        [ObservableProperty]
+        private DateTime groupStartTime;
+
+        [ObservableProperty]
+        private string description = string.Empty;
+
+        [ObservableProperty]
+        private string baseDestinationFolder = string.Empty;
 
         public OperationGroup(string description)
         {
-            GroupStartTime = DateTime.Now;
-            Description = description;
+            this.description = description;
+            this.groupStartTime = DateTime.Now;
         }
 
         public void AddOperation(FileOperation operation)
         {
             Operations.Add(operation);
 
-            // Speichere den Basis-Zielordner für späteres Aufräumen
             if (string.IsNullOrEmpty(BaseDestinationFolder) && !string.IsNullOrEmpty(operation.DestinationPath))
             {
                 BaseDestinationFolder = Path.GetDirectoryName(operation.DestinationPath) ?? string.Empty;
@@ -46,7 +58,6 @@ namespace WPF_VideoSort.Models
                     var parent = Directory.GetParent(BaseDestinationFolder);
                     if (parent == null) break;
 
-                    // Suche nach dem obersten Ordner der Sortierung (wo die Kategorie-Ordner beginnen)
                     if (Enum.GetNames(typeof(FileCategory)).Any(cat =>
                         cat.Equals(Path.GetFileName(BaseDestinationFolder), StringComparison.OrdinalIgnoreCase)))
                     {
@@ -113,26 +124,22 @@ namespace WPF_VideoSort.Models
             int successful = 0;
             int failed = 0;
 
-            // Operationen in umgekehrter Reihenfolge ausführen
             foreach (var operation in group.Operations.AsEnumerable().Reverse())
             {
                 try
                 {
-                    // Prüfen ob die Datei am Zielort existiert
                     if (!File.Exists(operation.DestinationPath))
                     {
                         failed++;
                         continue;
                     }
 
-                    // Zielverzeichnis erstellen, falls es nicht existiert
                     var sourceDir = Path.GetDirectoryName(operation.SourcePath);
                     if (!string.IsNullOrEmpty(sourceDir) && !Directory.Exists(sourceDir))
                     {
                         Directory.CreateDirectory(sourceDir);
                     }
 
-                    // Wenn eine Datei am ursprünglichen Ort existiert, diese umbenennen
                     string finalSourcePath = operation.SourcePath;
                     if (File.Exists(operation.SourcePath))
                     {
@@ -147,7 +154,6 @@ namespace WPF_VideoSort.Models
                         } while (File.Exists(finalSourcePath));
                     }
 
-                    // Datei zurück verschieben
                     await Task.Run(() => File.Move(operation.DestinationPath, finalSourcePath));
                     successful++;
                 }
@@ -158,7 +164,6 @@ namespace WPF_VideoSort.Models
                 }
             }
 
-            // Aufräumen der leeren Ordner nach dem Zurückverschieben
             if (!string.IsNullOrEmpty(group.BaseDestinationFolder))
             {
                 await CleanupEmptyDirectoriesAsync(group.BaseDestinationFolder);
@@ -177,7 +182,6 @@ namespace WPF_VideoSort.Models
             {
                 await Task.Run(() =>
                 {
-                    // Von unten nach oben durch die Verzeichnisstruktur gehen
                     foreach (var dir in Directory.GetDirectories(startPath, "*", SearchOption.AllDirectories)
                                                .OrderByDescending(d => d.Length))
                     {
@@ -196,7 +200,6 @@ namespace WPF_VideoSort.Models
                         }
                     }
 
-                    // Zum Schluss den Startordner prüfen
                     var startDirInfo = new DirectoryInfo(startPath);
                     if (IsDirectoryEmpty(startDirInfo))
                     {
@@ -216,7 +219,8 @@ namespace WPF_VideoSort.Models
             return !dirInfo.GetFiles().Any() && !dirInfo.GetDirectories().Any();
         }
 
-        public void Clear()
+        [RelayCommand]
+        private void Clear()
         {
             undoStack.Clear();
             currentGroup = null;

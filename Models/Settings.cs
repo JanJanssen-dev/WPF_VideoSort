@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,10 +7,22 @@ using System.Threading.Tasks;
 
 namespace WPF_VideoSort.Models
 {
-    public class Settings
+    public partial class Settings : ObservableObject
     {
-        public string? LastSourceFolder { get; set; }
-        public string? LastDestinationFolder { get; set; }
-        public SortOption LastSortOption { get; set; }
+        [ObservableProperty]
+        private string? lastSourceFolder;
+
+        [ObservableProperty]
+        private string? lastDestinationFolder;
+
+        [ObservableProperty]
+        private SortOption lastSortOption;
+
+        public Settings()
+        {
+            lastSourceFolder = null;
+            lastDestinationFolder = null;
+            lastSortOption = SortOption.DateCreated; // Standardwert
+        }
     }
 }

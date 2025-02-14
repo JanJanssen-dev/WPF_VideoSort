@@ -20,16 +20,16 @@ namespace WPF_VideoSort.ViewModels
         private ObservableCollection<FolderPattern> _savedPatterns = new();
 
         [ObservableProperty]
-        private FolderPattern? _selectedPattern;
+        private FolderPattern? selectedPattern;
 
         [ObservableProperty]
-        private string _newPatternName = string.Empty;
+        private string newPatternName = string.Empty;
 
         [ObservableProperty]
-        private string _newPatternValue = string.Empty;
+        private string newPatternValue = string.Empty;
 
         [ObservableProperty]
-        private string _newPatternDescription = string.Empty;
+        private string newPatternDescription = string.Empty;
 
         public List<SortOption> AvailableSortOptions => Enum.GetValues(typeof(SortOption))
                                                            .Cast<SortOption>()

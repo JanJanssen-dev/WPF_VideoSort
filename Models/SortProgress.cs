@@ -1,17 +1,30 @@
 ﻿using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace WPF_VideoSort.Models
 {
-    public class SortProgress
+    // Diese Klasse könnte auch partial sein und ObservableObject nutzen
+    public partial class SortProgress : ObservableObject
     {
-        public string SourceFolder { get; set; }
-        public string DestinationFolder { get; set; }
-        public List<string> ProcessedFiles { get; set; } = new();
-        public List<string> PendingFiles { get; set; } = new();
-        public SortOption SortOption { get; set; }
-        public DateTime LastSaved { get; set; }
+        [ObservableProperty]
+        private string sourceFolder = string.Empty;
+
+        [ObservableProperty]
+        private string destinationFolder = string.Empty;
+
+        [ObservableProperty]
+        private List<string> processedFiles = new();
+
+        [ObservableProperty]
+        private List<string> pendingFiles = new();
+
+        [ObservableProperty]
+        private SortOption sortOption;
+
+        [ObservableProperty]
+        private DateTime lastSaved;
     }
 
     public partial class ProgressManager : ObservableObject
@@ -21,24 +34,21 @@ namespace WPF_VideoSort.Models
         [ObservableProperty]
         private bool hasStoredProgress;
 
-        public void SaveProgress(string sourceFolder, string destinationFolder,
-            List<string> processedFiles, List<string> pendingFiles, SortOption sortOption)
+        // Statt einzelner Parameter verwenden wir ein Progress-Objekt
+        public void SaveProgress(SortProgress progress)
         {
-            var progress = new SortProgress
+            try
             {
-                SourceFolder = sourceFolder,
-                DestinationFolder = destinationFolder,
-                ProcessedFiles = processedFiles,
-                PendingFiles = pendingFiles,
-                SortOption = sortOption,
-                LastSaved = DateTime.Now
-            };
-
-            File.WriteAllText(PROGRESS_FILE, JsonSerializer.Serialize(progress));
-            HasStoredProgress = true;
+                File.WriteAllText(PROGRESS_FILE, JsonSerializer.Serialize(progress));
+                HasStoredProgress = true;
+            }
+            catch
+            {
+                HasStoredProgress = false;
+            }
         }
 
-        public SortProgress LoadProgress()
+        public SortProgress? LoadProgress()
         {
             if (!File.Exists(PROGRESS_FILE))
             {
@@ -60,7 +70,8 @@ namespace WPF_VideoSort.Models
             }
         }
 
-        public void ClearProgress()
+        [RelayCommand]
+        private void ClearProgress()
         {
             if (File.Exists(PROGRESS_FILE))
             {

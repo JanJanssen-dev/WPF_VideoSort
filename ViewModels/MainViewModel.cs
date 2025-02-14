@@ -2,14 +2,13 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using System.IO;
-using System.Windows;
+using System.Collections.ObjectModel;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using Directory = System.IO.Directory;
 using System.Text.Json;
 using WPF_VideoSort.Models;
 using WPF_VideoSort.Services;
-using System.Collections.ObjectModel;
 
 namespace WPF_VideoSort.ViewModels
 {
@@ -24,33 +23,33 @@ namespace WPF_VideoSort.ViewModels
         private bool canUndo;
 
         [ObservableProperty]
-        private string? sourceFolder;
+        private string sourceFolder = string.Empty;
 
         [ObservableProperty]
-        private string? _destinationFolder;
+        private string destinationFolder = string.Empty;
 
         [ObservableProperty]
-        private ObservableCollection<string> _logMessages = new();
+        private ObservableCollection<string> logMessages = [];
 
         [ObservableProperty]
-        private double _progressValue;
+        private double progressValue;
 
         [ObservableProperty]
-        private bool _isSorting;
+        private bool isSorting;
 
         [ObservableProperty]
-        private SortSettingsViewModel _sortSettings;
+        private SortSettingsViewModel sortSettings;
 
         [ObservableProperty]
-        private string _statusText = string.Empty;
+        private string statusText = string.Empty;
 
         public MainViewModel()
         {
             _undoManager = new UndoManager();
             _mediaService = new MediaService();
             _fileExtensionService = new FileExtensionService();
-            SortSettings = new SortSettingsViewModel(_mediaService);
-            LogMessages = new ObservableCollection<string>();
+            sortSettings = new SortSettingsViewModel(_mediaService);
+            logMessages = [];
 
             // UndoManager PropertyChanged Event abonnieren
             _undoManager.PropertyChanged += (s, e) =>
@@ -66,12 +65,12 @@ namespace WPF_VideoSort.ViewModels
 
         private void AddLogMessage(string message)
         {
-            App.Current.Dispatcher.Invoke(() => LogMessages.Add(message));
+            App.Current?.Dispatcher.Invoke(() => LogMessages.Add(message));
         }
 
         private void UpdateProgress(double value)
         {
-            App.Current.Dispatcher.Invoke(() => ProgressValue = value);
+            App.Current?.Dispatcher.Invoke(() => ProgressValue = value);
         }
 
         [RelayCommand]
@@ -119,7 +118,7 @@ namespace WPF_VideoSort.ViewModels
         }
 
         [RelayCommand(CanExecute = nameof(CanSortFiles))]
-        private async Task SortFiles()
+        private async Task SortFilesAsync()
         {
             if (string.IsNullOrEmpty(SourceFolder) || string.IsNullOrEmpty(DestinationFolder))
             {
@@ -210,35 +209,6 @@ namespace WPF_VideoSort.ViewModels
             }
         }
 
-        private async Task ProcessFileAsync(string file, HashSet<string> processedFiles)
-        {
-            var fileCategory = _fileExtensionService.GetCategory(file);
-            AddLogMessage($"Verarbeite {Path.GetFileName(file)} (Kategorie: {fileCategory})");
-
-            if (SortSettings.Settings.EnableDuplicateCheck &&
-                await CheckForDuplicatesAsync(file, processedFiles))
-            {
-                return;
-            }
-
-            var mediaDate = await Task.Run(() => GetMediaDate(file));
-            var customValues = SortSettings.GetCustomValues(file);
-
-            if (DestinationFolder == null)
-            {
-                AddLogMessage("Zielordner ist nicht gesetzt.");
-                return;
-            }
-
-            string targetFolder = Path.Combine(
-                DestinationFolder,
-                fileCategory.ToString(),
-                SortSettings.Settings.GetFolderPath(mediaDate, customValues)
-            );
-
-            await MoveFileAsync(file, targetFolder, processedFiles);
-        }
-
         private async Task<bool> CheckForDuplicatesAsync(string file, HashSet<string> processedFiles)
         {
             foreach (var processedFile in processedFiles)
@@ -255,51 +225,7 @@ namespace WPF_VideoSort.ViewModels
             return false;
         }
 
-        private async Task MoveFileAsync(string sourceFile, string targetFolder, HashSet<string> processedFiles)
-        {
-            await Task.Run(() =>
-            {
-                Directory.CreateDirectory(targetFolder);
-                string destinationFile = Path.Combine(targetFolder, Path.GetFileName(sourceFile));
-
-                if (File.Exists(destinationFile))
-                {
-                    if (SortSettings.Settings.HandleDuplicates == DuplicateHandling.Rename)
-                    {
-                        string newFileName = GetUniqueFileName(destinationFile);
-                        File.Move(sourceFile, newFileName);
-                        processedFiles.Add(newFileName);
-                        AddLogMessage($"Umbenannt und verschoben: {Path.GetFileName(sourceFile)} -> {Path.GetFileName(newFileName)}");
-                    }
-                    else
-                    {
-                        AddLogMessage($"Datei existiert bereits: {destinationFile}");
-                    }
-                }
-                else
-                {
-                    File.Move(sourceFile, destinationFile);
-                    processedFiles.Add(destinationFile);
-                    AddLogMessage($"Verschoben: {Path.GetFileName(sourceFile)} -> {destinationFile}");
-                }
-            });
-        }
-
-        private string GetUniqueFileName(string filePath)
-        {
-            string directory = Path.GetDirectoryName(filePath) ?? "";
-            string fileName = Path.GetFileNameWithoutExtension(filePath);
-            string extension = Path.GetExtension(filePath);
-            int counter = 1;
-
-            string newPath = filePath;
-            while (File.Exists(newPath))
-            {
-                newPath = Path.Combine(directory, $"{fileName}_{counter++}{extension}");
-            }
-
-            return newPath;
-        }
+        
 
         private DateTime GetMediaDate(string filePath)
         {
@@ -314,7 +240,7 @@ namespace WPF_VideoSort.ViewModels
                             if (directory is ExifSubIfdDirectory exifSubIfd)
                             {
                                 DateTime? dateTime = exifSubIfd.GetDateTime(ExifDirectoryBase.TagDateTimeOriginal);
-                                if (dateTime != null)
+                                if (dateTime.HasValue)
                                     return dateTime.Value;
                             }
                         }
@@ -355,15 +281,15 @@ namespace WPF_VideoSort.ViewModels
                     if (settingsData != null)
                     {
                         if (settingsData.TryGetValue("LastSourceFolder", out var sourceFolder))
-                            SourceFolder = sourceFolder?.ToString();
+                            SourceFolder = sourceFolder?.ToString() ?? string.Empty;
 
                         if (settingsData.TryGetValue("LastDestinationFolder", out var destFolder))
-                            DestinationFolder = destFolder?.ToString();
+                            DestinationFolder = destFolder?.ToString() ?? string.Empty;
 
-                        if (settingsData.TryGetValue("SortSettings", out var sortSettings))
+                        if (settingsData.TryGetValue("SortSettings", out var sortSettings) && sortSettings != null)
                         {
                             var settings = JsonSerializer.Deserialize<SortSettings>(
-                                sortSettings?.ToString() ?? "{}");
+                                sortSettings.ToString() ?? "{}");
                             if (settings != null)
                                 SortSettings.Settings = settings;
                         }
@@ -382,8 +308,8 @@ namespace WPF_VideoSort.ViewModels
             {
                 var settingsData = new Dictionary<string, object>
                 {
-                    { "LastSourceFolder", SourceFolder ?? "" },
-                    { "LastDestinationFolder", DestinationFolder ?? "" },
+                    { "LastSourceFolder", SourceFolder },
+                    { "LastDestinationFolder", DestinationFolder },
                     { "SortSettings", SortSettings.Settings }
                 };
 
